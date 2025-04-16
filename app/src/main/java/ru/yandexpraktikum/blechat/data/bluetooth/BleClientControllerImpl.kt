@@ -2,6 +2,8 @@ package ru.yandexpraktikum.blechat.data.bluetooth
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
@@ -26,7 +28,7 @@ class BleClientControllerImpl @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter?,
     private val locationManager: LocationManager,
     private val viewModelScope: CoroutineScope,
-): BleClientController {
+) : BleClientController {
 
     private val bleScanner by lazy {
         bluetoothAdapter?.bluetoothLeScanner
@@ -58,7 +60,10 @@ class BleClientControllerImpl @Inject constructor(
 
     override fun updateLocationState() {
         try {
-            _isLocationEnabled.value = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            _isLocationEnabled.value =
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
+                    LocationManager.NETWORK_PROVIDER
+                )
         } catch (e: Exception) {
             Log.e("BLE", "Failed to initialize Location state", e)
         }
@@ -73,8 +78,7 @@ class BleClientControllerImpl @Inject constructor(
             val device = result.device
             context.checkForConnectPermission {
                 val bluetoothDevice = ScannedBluetoothDevice(
-                    name = device.name,
-                    address = device.address
+                    name = device.name, address = device.address
                 )
                 _scannedDevices.update { devices ->
                     if (devices.none { it.address == bluetoothDevice.address }) {
@@ -93,20 +97,16 @@ class BleClientControllerImpl @Inject constructor(
     override fun startScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_SCAN
+                    context, Manifest.permission.BLUETOOTH_SCAN
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 return
             }
         } else {
             if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_ADMIN
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
+                    context, Manifest.permission.BLUETOOTH_ADMIN
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 return
@@ -118,20 +118,16 @@ class BleClientControllerImpl @Inject constructor(
     override fun stopScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_SCAN
+                    context, Manifest.permission.BLUETOOTH_SCAN
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 return
             }
         } else {
             if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_ADMIN
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
+                    context, Manifest.permission.BLUETOOTH_ADMIN
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 return
@@ -146,7 +142,25 @@ class BleClientControllerImpl @Inject constructor(
     }
 
     override fun connectToDevice(device: ScannedBluetoothDevice): Boolean {
-        TODO()
+        val gattCallback = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    return
+                }
+
+                if (newState == BluetoothGatt.STATE_CONNECTED) {
+                    gatt?.discoverServices()
+                }
+            }
+
+            override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    return
+                }
+            }
+        }
+        val result = device.connectGatt(context, false, gattCallback)
+        return result == null
     }
 
     override suspend fun sendMessage(message: String, deviceAddress: String): Boolean {
@@ -159,5 +173,9 @@ class BleClientControllerImpl @Inject constructor(
 
     override fun release() {
         closeConnection()
+    }
+
+    private companion object {
+        const val TAG = "BleClientControllerImpl"
     }
 }
