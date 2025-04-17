@@ -27,6 +27,7 @@ import ru.yandexpraktikum.blechat.domain.model.ScannedBluetoothDevice
 import ru.yandexpraktikum.blechat.utils.checkForConnectPermission
 import ru.yandexpraktikum.blechat.utils.notifyCharUUID
 import ru.yandexpraktikum.blechat.utils.serviceUUID
+import ru.yandexpraktikum.blechat.utils.writeCharUUID
 import java.nio.charset.Charset
 import javax.inject.Inject
 
@@ -233,7 +234,29 @@ class BleClientControllerImpl @Inject constructor(
     }
 
     override suspend fun sendMessage(message: String, deviceAddress: String): Boolean {
-        TODO()
+        val gattService = currentGatt?.getService(serviceUUID)
+        val characteristic = gattService?.getCharacteristic(writeCharUUID)
+
+        return if (characteristic != null) {
+            characteristic.setValue(message.toByteArray(Charset.defaultCharset()))
+            context.checkForConnectPermission {
+                currentGatt?.writeCharacteristic(characteristic)
+            }
+            _scannedDevices.update { devices ->
+                devices.map {
+                    if (it.address == deviceAddress) {
+                        it.copy(
+                            messages = it.messages + Message(
+                                text = message,
+                                senderAddress = bluetoothAdapter?.address ?: "",
+                                isFromLocalUser = true
+                            )
+                        )
+                    } else it
+                }
+            }
+            true
+        } else false
     }
 
     override fun closeConnection() {
