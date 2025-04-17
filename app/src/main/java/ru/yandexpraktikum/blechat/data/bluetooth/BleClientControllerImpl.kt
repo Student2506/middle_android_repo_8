@@ -152,26 +152,13 @@ class BleClientControllerImpl @Inject constructor(
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     return
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.BLUETOOTH_SCAN
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        return
-                    }
-                } else {
-                    if (ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.ACCESS_FINE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.BLUETOOTH_ADMIN
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        return
-                    }
-                }
+
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
-                        gatt?.discoverServices()
+                        context.checkForConnectPermission {
+                            gatt?.discoverServices()
+                        }
+
                         _scannedDevices.update { devices ->
                             devices.map {
                                 if (it.address == gatt?.device?.address) {
@@ -202,8 +189,6 @@ class BleClientControllerImpl @Inject constructor(
         }
         val bluetoothDevice = bluetoothAdapter?.getRemoteDevice(device.address)
         currentGatt = bluetoothDevice?.connectGatt(context, false, gattCallback)
-        Log.d(TAG, currentGatt.toString())
-        Log.d(TAG, bluetoothDevice.toString())
         return currentGatt == null
     }
 
@@ -212,25 +197,10 @@ class BleClientControllerImpl @Inject constructor(
     }
 
     override fun closeConnection() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ActivityCompat.checkSelfPermission(
-                    context, Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
-        } else {
-            if (ActivityCompat.checkSelfPermission(
-                    context, Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
-                    context, Manifest.permission.BLUETOOTH_ADMIN
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
+        context.checkForConnectPermission {
+            currentGatt?.close()
+            currentGatt = null
         }
-        currentGatt?.close()
-        currentGatt = null
     }
 
     override fun release() {
