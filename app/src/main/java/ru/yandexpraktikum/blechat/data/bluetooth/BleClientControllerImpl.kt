@@ -4,6 +4,7 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -19,9 +20,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import ru.yandexpraktikum.blechat.domain.bluetooth.BleClientController
+import ru.yandexpraktikum.blechat.domain.model.Message
 import ru.yandexpraktikum.blechat.domain.model.ScannedBluetoothDevice
 import ru.yandexpraktikum.blechat.utils.checkForConnectPermission
+import ru.yandexpraktikum.blechat.utils.notifyCharUUID
+import ru.yandexpraktikum.blechat.utils.serviceUUID
+import java.nio.charset.Charset
 import javax.inject.Inject
 
 class BleClientControllerImpl @Inject constructor(
@@ -182,8 +188,42 @@ class BleClientControllerImpl @Inject constructor(
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    return
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    val service = gatt?.getService(serviceUUID)
+                    val notifyCharacteristic = service?.getCharacteristic(notifyCharUUID)
+                    notifyCharacteristic?.let {
+                        context.checkForConnectPermission {
+                            gatt.setCharacteristicNotification(
+                                notifyCharacteristic, true
+                            )
+                        }
+                    }
+                }
+                return
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt?,
+                characteristic: BluetoothGattCharacteristic?,
+            ) {
+                if (characteristic?.uuid == notifyCharUUID) {
+                    val message = String(characteristic.value, Charset.defaultCharset())
+                    viewModelScope.launch {
+                        _scannedDevices.update { devices ->
+                            devices.map {
+                                if (it.address == gatt?.device?.address) {
+                                    it.copy(
+                                        messages = it.messages + Message(
+                                            text = message,
+                                            senderAddress = gatt.device.address,
+                                            isFromLocalUser = false
+                                        )
+                                    )
+                                } else it
+                            }
+                        }
+                    }
                 }
             }
         }
