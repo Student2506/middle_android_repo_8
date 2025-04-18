@@ -19,7 +19,7 @@ class BleChat : Application() {
     private fun setUpNotificationsChannel() {
         val channel =
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManager.IMPORTANCE_DEFAULT)
-                .setName(this.getString(R.string.app_name)).build()
+                .setName(this.getString(R.string.message)).build()
         val notificationManager = NotificationManagerCompat.from(this)
         notificationManager.createNotificationChannel(channel)
     }
