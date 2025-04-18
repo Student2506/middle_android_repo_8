@@ -74,9 +74,8 @@ class BleClientControllerImpl @Inject constructor(
     override fun updateLocationState() {
         try {
             _isLocationEnabled.value =
-                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
-                    LocationManager.NETWORK_PROVIDER
-                )
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         } catch (e: Exception) {
             Log.e("BLE", "Failed to initialize Location state", e)
         }
