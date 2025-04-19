@@ -273,10 +273,8 @@ class BleClientControllerImpl @Inject constructor(
     }
 
     override fun closeConnection() {
-        context.checkForConnectPermission {
-            currentGatt?.close()
-            currentGatt = null
-        }
+        currentGatt?.close()
+        currentGatt = null
     }
 
     override fun release() {
