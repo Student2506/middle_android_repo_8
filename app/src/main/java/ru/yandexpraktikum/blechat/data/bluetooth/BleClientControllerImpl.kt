@@ -74,8 +74,9 @@ class BleClientControllerImpl @Inject constructor(
     override fun updateLocationState() {
         try {
             _isLocationEnabled.value =
-                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
+                    LocationManager.NETWORK_PROVIDER
+                )
         } catch (e: Exception) {
             Log.e("BLE", "Failed to initialize Location state", e)
         }
@@ -191,15 +192,17 @@ class BleClientControllerImpl @Inject constructor(
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                        context, Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) return
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     val service = gatt?.getService(serviceUUID)
                     val notifyCharacteristic = service?.getCharacteristic(notifyCharUUID)
                     notifyCharacteristic?.let {
-                        context.checkForConnectPermission {
-                            gatt.setCharacteristicNotification(
-                                notifyCharacteristic, true
-                            )
-                        }
+                        gatt.setCharacteristicNotification(
+                            notifyCharacteristic, true
+                        )
                     }
                 }
                 return
