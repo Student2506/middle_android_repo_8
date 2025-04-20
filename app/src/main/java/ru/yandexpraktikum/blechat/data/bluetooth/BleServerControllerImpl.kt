@@ -31,6 +31,7 @@ import ru.yandexpraktikum.blechat.domain.model.Message
 import ru.yandexpraktikum.blechat.domain.model.ScannedBluetoothDevice
 import ru.yandexpraktikum.blechat.utils.checkForConnectPermission
 import ru.yandexpraktikum.blechat.utils.notifyCharUUID
+import ru.yandexpraktikum.blechat.utils.notifyCharacteristicChangedCompat
 import ru.yandexpraktikum.blechat.utils.serviceUUID
 import ru.yandexpraktikum.blechat.utils.writeCharUUID
 import java.nio.charset.Charset
@@ -41,8 +42,8 @@ class BleServerControllerImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val bluetoothManager: BluetoothManager?,
     private val bluetoothAdapter: BluetoothAdapter?,
-    private val viewModelScope: CoroutineScope
-): BleServerController {
+    private val viewModelScope: CoroutineScope,
+) : BleServerController {
 
     private val CLIENT_CONFIG_DESCRIPTOR = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
@@ -91,10 +92,8 @@ class BleServerControllerImpl @Inject constructor(
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_ADVERTISE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                context, Manifest.permission.BLUETOOTH_ADVERTISE
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             Log.e("BLE", "Bluetooth advertise permission not granted")
@@ -102,17 +101,11 @@ class BleServerControllerImpl @Inject constructor(
         }
 
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setConnectable(true)
-            .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .build()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY).setConnectable(true)
+            .setTimeout(0).setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH).build()
 
-        val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .setIncludeTxPowerLevel(false)
-            .addServiceUuid(ParcelUuid(serviceUUID))
-            .build()
+        val data = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(false)
+            .addServiceUuid(ParcelUuid(serviceUUID)).build()
 
         try {
             bluetoothLeAdvertiser?.startAdvertising(settings, data, advertiseCallback)
@@ -123,10 +116,8 @@ class BleServerControllerImpl @Inject constructor(
 
 
     override fun stopAdvertising() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_ADVERTISE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                context, Manifest.permission.BLUETOOTH_ADVERTISE
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             return
@@ -142,10 +133,8 @@ class BleServerControllerImpl @Inject constructor(
 
     override fun startServer() {
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
+                context, Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             return
@@ -155,7 +144,7 @@ class BleServerControllerImpl @Inject constructor(
             override fun onConnectionStateChange(
                 device: android.bluetooth.BluetoothDevice?,
                 status: Int,
-                newState: Int
+                newState: Int,
             ) {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
@@ -163,8 +152,7 @@ class BleServerControllerImpl @Inject constructor(
                             _connectedDevices.update { devices ->
                                 if (devices.none { it.address == device?.address } && device != null) {
                                     devices + ScannedBluetoothDevice(
-                                        name = device.name,
-                                        address = device.address
+                                        name = device.name, address = device.address
                                     )
                                 } else devices
                             }
@@ -187,11 +175,13 @@ class BleServerControllerImpl @Inject constructor(
                 preparedWrite: Boolean,
                 responseNeeded: Boolean,
                 offset: Int,
-                value: ByteArray?
+                value: ByteArray?,
             ) {
                 if (characteristic?.uuid == writeCharUUID) {
                     context.checkForConnectPermission {
-                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                        gattServer?.sendResponse(
+                            device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null
+                        )
                     }
                     val message = value?.let { String(it, Charset.defaultCharset()) }
                     viewModelScope.launch {
@@ -226,8 +216,7 @@ class BleServerControllerImpl @Inject constructor(
 
         val notifyCharacteristic = BluetoothGattCharacteristic(
             notifyCharUUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or
-                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
 
@@ -260,8 +249,7 @@ class BleServerControllerImpl @Inject constructor(
 
     override suspend fun sendServerMessage(message: String, deviceAddress: String): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
+                context, Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             return false
@@ -273,16 +261,15 @@ class BleServerControllerImpl @Inject constructor(
 
         return try {
             if (characteristic != null) {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    characteristic.setValue(message.toByteArray(Charset.defaultCharset()))
+                gattServer?.let {
+                    val success = context.notifyCharacteristicChangedCompat(
+                        gattServer!!,
+                        characteristic,
+                        message,
+                        device
+                    )
+                    Log.i("BLE", "Server message sent: $success")
                 }
-                val success =
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                        gattServer?.notifyCharacteristicChanged(device, characteristic, false)
-                    } else {
-                        gattServer?.notifyCharacteristicChanged(device!!, characteristic, false, message.toByteArray(Charset.defaultCharset()))
-                   }
-                Log.i("BLE", "Server message sent: $success")
                 _connectedDevices.update { devices ->
                     devices.map {
                         if (it.address == deviceAddress) {

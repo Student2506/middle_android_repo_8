@@ -2,6 +2,9 @@ package ru.yandexpraktikum.blechat.utils
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,34 +15,52 @@ import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.Composable
 import androidx.core.app.ActivityCompat
+import java.nio.charset.Charset
 
 val ALL_BLE_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
     arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT,
         Manifest.permission.BLUETOOTH_SCAN,
     )
-} else
-    arrayOf(
-        Manifest.permission.BLUETOOTH_ADMIN,
-        Manifest.permission.BLUETOOTH,
-        Manifest.permission.ACCESS_FINE_LOCATION
-    )
+} else arrayOf(
+    Manifest.permission.BLUETOOTH_ADMIN,
+    Manifest.permission.BLUETOOTH,
+    Manifest.permission.ACCESS_FINE_LOCATION
+)
 
 fun Context.checkForConnectPermission(action: () -> Unit) {
     when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ActivityCompat.checkSelfPermission(
-            this,
-            Manifest.permission.BLUETOOTH_CONNECT
+            this, Manifest.permission.BLUETOOTH_CONNECT
         ) == PackageManager.PERMISSION_GRANTED -> action.invoke()
+
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> action.invoke()
+    }
+}
+
+@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+fun Context.notifyCharacteristicChangedCompat(
+    gattServer: BluetoothGattServer,
+    characteristic: BluetoothGattCharacteristic,
+    message: String,
+    device: BluetoothDevice?
+): Any {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        return gattServer.notifyCharacteristicChanged(
+            device!!, characteristic, false, message.toByteArray(Charset.defaultCharset())
+        )
+    } else {
+        characteristic.setValue(message.toByteArray(Charset.defaultCharset()))
+        return gattServer.notifyCharacteristicChanged(device, characteristic, false)
     }
 }
 
 @Composable
 fun Context.bluetoothLauncher(
-    updateBluetoothEnabled: () -> Unit
+    updateBluetoothEnabled: () -> Unit,
 ): ManagedActivityResultLauncher<Intent, ActivityResult> {
     val enableBluetoothLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
