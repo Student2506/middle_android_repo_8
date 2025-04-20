@@ -31,6 +31,7 @@ import ru.yandexpraktikum.blechat.domain.model.Message
 import ru.yandexpraktikum.blechat.domain.model.ScannedBluetoothDevice
 import ru.yandexpraktikum.blechat.utils.checkForConnectPermission
 import ru.yandexpraktikum.blechat.utils.notifyCharUUID
+import ru.yandexpraktikum.blechat.utils.notifyCharacteristicChangedCompat
 import ru.yandexpraktikum.blechat.utils.serviceUUID
 import ru.yandexpraktikum.blechat.utils.writeCharUUID
 import java.nio.charset.Charset
@@ -179,11 +180,7 @@ class BleServerControllerImpl @Inject constructor(
                 if (characteristic?.uuid == writeCharUUID) {
                     context.checkForConnectPermission {
                         gattServer?.sendResponse(
-                            device,
-                            requestId,
-                            BluetoothGatt.GATT_SUCCESS,
-                            0,
-                            null
+                            device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null
                         )
                     }
                     val message = value?.let { String(it, Charset.defaultCharset()) }
@@ -264,20 +261,15 @@ class BleServerControllerImpl @Inject constructor(
 
         return try {
             if (characteristic != null) {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    characteristic.setValue(message.toByteArray(Charset.defaultCharset()))
-                }
-                val success = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    gattServer?.notifyCharacteristicChanged(device, characteristic, false)
-                } else {
-                    gattServer?.notifyCharacteristicChanged(
-                        device!!,
+                gattServer?.let {
+                    val success = context.notifyCharacteristicChangedCompat(
+                        gattServer!!,
                         characteristic,
-                        false,
-                        message.toByteArray(Charset.defaultCharset())
+                        message,
+                        device
                     )
+                    Log.i("BLE", "Server message sent: $success")
                 }
-                Log.i("BLE", "Server message sent: $success")
                 _connectedDevices.update { devices ->
                     devices.map {
                         if (it.address == deviceAddress) {
